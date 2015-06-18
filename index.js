@@ -18,6 +18,7 @@ var crc = require('crc').crc32;
 var debug = require('debug')('express-session');
 var deprecate = require('depd')('express-session');
 var parseUrl = require('parseurl');
+var querystring = require('querystring');
 var uid = require('uid-safe').sync
   , onHeaders = require('on-headers')
   , signature = require('cookie-signature')
@@ -79,6 +80,7 @@ var defer = typeof setImmediate === 'function'
  * @param {String|Array} [options.secret] Secret for signing session ID
  * @param {Object} [options.store=MemoryStore] Session store
  * @param {String} [options.unset]
+ * @param {String} [options.nextopen] Whether save session at the next open browser。 
  * @return {Function} middleware
  * @public
  */
@@ -112,6 +114,14 @@ function session(options) {
 
   // get the cookie signing secret
   var secret = opts.secret
+
+  // get onoff nextopen
+  var nextopen = options.nextopen === undefined ? true : options.nextopen
+  var sessionID_Dep;
+
+  if(!nextopen && (cookieOptions.maxAge || cookieOptions.expires) && (new Cookie(cookieOptions)).expires > Date.now()){
+    sessionID_Dep = name + '.dep';
+  }
 
   if (typeof generateId !== 'function') {
     throw new TypeError('genid option must be a function');
@@ -176,6 +186,16 @@ function session(options) {
   })
 
   return function session(req, res, next) {
+    // Processing reopen the browser session
+    if(sessionID_Dep){
+      if(!req.cookies[sessionID_Dep]){
+        delete req.cookies[name]
+        req.headers.cookie = querystring.stringify(req.cookies, ';', '=')
+        //res.cookie(sessionID_Dep,'Dep',{httpOnly:true})
+        setcookie(res, sessionID_Dep, "Dep", "Dep", {httpOnly:true});
+      }
+    }
+
     // self-awareness
     if (req.session) {
       next()
